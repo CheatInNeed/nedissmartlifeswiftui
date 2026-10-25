@@ -1,0 +1,25 @@
+# Secrets – never commit
+config.json
+*.key
+.env
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Tuya/TinyTuya local scan output
+devices.json
+tinytuya.json
+snapshot.json
+
+# macOS
+.DSStore
+.DS_Store
+
+# Xcode (til Fase 3)
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
