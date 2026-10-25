@@ -16,9 +16,6 @@ LampBar.app (SwiftUI)  ──runs──▶  lamp.py (TinyTuya)  ──LAN, Tuya 
 The Tuya protocol is encrypted with a per-device **local key**, so the one-time setup is
 getting that key. After that, everything works without the cloud.
 
-> The app's own labels are in Danish ("Loftslampe", "Start ved login", "Afslut"). They are plain
-> strings in the UI code in [`app/LampBar.swift`](app/LampBar.swift) if you want to change them.
-
 ## Requirements
 
 - macOS 14 or newer (Apple Silicon or Intel)
@@ -146,7 +143,7 @@ cp -R build/LampBar.app /Applications/
 open /Applications/LampBar.app
 ```
 
-A light bulb appears in the menu bar. Tick **Start ved login** in the menu to launch it at login
+A light bulb appears in the menu bar. Tick **Start at login** in the menu to launch it at login
 (macOS registers the app at its current location, so put it in `/Applications` first and don't
 move it afterwards).
 
@@ -182,13 +179,13 @@ reset). The app then fails with `Check device key or version` (error 914). To fi
 | Symptom | Likely cause |
 | --- | --- |
 | `Check device key or version` / error 914 | Wrong `local_key`, or wrong `version`. Re-check `devices.json`; try `3.4` / `3.3`. If the lamp was re-paired, fetch the key again (above). |
-| `lampen svarede ikke (timeout eller offline)` | Wrong IP, lamp offline, or Mac and lamp are not on the same network/VLAN. Check `ping <ip>`. A guest network or "client isolation" blocks it. |
+| `the lamp did not respond (timeout or offline)` | Wrong IP, lamp offline, or Mac and lamp are not on the same network/VLAN. Check `ping <ip>`. A guest network or "client isolation" blocks it. |
 | Works in Terminal but not from the app | macOS may ask for **Local Network** access for the app – allow it (*System Settings → Privacy & Security → Local Network*). |
 | Build says Xcode / SwiftUI macro errors | The full Xcode app is required, not only the Command Line Tools. If `/Applications/Xcode.app` is elsewhere, run `sudo xcode-select -s <path>/Contents/Developer`. |
 | Wizard says *permission deny* / *no permissions* | The project is missing an API service (see 2b.3) or the data center does not match your account. |
 | Menu shows an orange warning | It prints the error from `lamp.py`; run the same command in Terminal to see it in full. |
 
-To remove everything: untick *Start ved login*, delete `LampBar.app`, and
+To remove everything: untick *Start at login*, delete `LampBar.app`, and
 `rm -rf ~/.local/share/lamp ~/.config/lamp`.
 
 ## Project layout

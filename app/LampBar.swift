@@ -1,10 +1,10 @@
-// LampBar – lille macOS menu bar-app til Nedis SmartLife loftslampen.
-// Kalder lamp.py via det lokale venv og parser JSON. Bygges med swiftc (se build.sh).
+// LampBar – a small macOS menu bar app for a Tuya/Nedis SmartLife lamp.
+// Calls lamp.py through the local venv and parses its JSON. Built with swiftc (see build.sh).
 
 import SwiftUI
 import ServiceManagement
 
-// MARK: - Stier (lamp.py + venv installeres her af build.sh)
+// MARK: - Paths (lamp.py + venv are installed here by build.sh)
 
 enum Paths {
     static let home = FileManager.default.homeDirectoryForCurrentUser
@@ -22,7 +22,7 @@ struct LampState: Decodable {
     var rgb: [Int]?
 }
 
-// Kører lamp.py uden for main-tråden; returnerer rå stdout.
+// Runs lamp.py (call off the main thread); returns raw stdout.
 private func runLamp(_ args: [String]) throws -> Data {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: Paths.python)
@@ -42,8 +42,8 @@ final class Lamp: ObservableObject {
     @Published var error: String?
     @Published var busy = false
 
-    // Kommandoer køres én ad gangen. En ny kommando med samme nøgle erstatter en, der
-    // venter, så sliders giver live respons uden at stable kald op (kun nyeste værdi sendes).
+    // Commands run one at a time. A new command with the same key replaces a waiting one,
+    // so sliders feel live without piling up calls (only the newest value is sent).
     private var queue: [(key: String, args: [String])] = []
     private var draining = false
 
@@ -58,7 +58,7 @@ final class Lamp: ObservableObject {
         }
     }
 
-    // Kør en kommando og vis fejl, hvis lampen ikke svarer.
+    // Run a command and show an error if the lamp does not respond.
     private func send(_ args: [String]) async {
         busy = true; defer { busy = false }
         do {
@@ -69,7 +69,7 @@ final class Lamp: ObservableObject {
             }
             error = nil
         } catch {
-            self.error = "Kunne ikke køre lamp.py: \(error.localizedDescription)"
+            self.error = "Could not run lamp.py: \(error.localizedDescription)"
         }
     }
 
@@ -84,10 +84,10 @@ final class Lamp: ObservableObject {
                       let msg = obj["error"] as? String {
                 error = msg
             } else {
-                error = "Uventet svar fra lampen"
+                error = "Unexpected response from the lamp"
             }
         } catch {
-            self.error = "Lampen svarer ikke"
+            self.error = "The lamp is not responding"
         }
     }
 
@@ -106,13 +106,13 @@ final class Lamp: ObservableObject {
         enqueue("temp", ["temp", String(pct)])
     }
 
-    // Tilbage til hvid: `temp` skifter lampen til white-mode med den nuværende farvetemperatur.
+    // Back to white: `temp` switches the lamp to white mode at the current colour temperature.
     func setWhite() { enqueue("temp", ["temp", String(state.colourtemp ?? 50)]) }
 
     func setColor(_ hex: String) { enqueue("color", ["color", hex]) }
 }
 
-// MARK: - Farvehjælpere
+// MARK: - Colour helpers
 
 func hex(_ c: Color) -> String {
     let ns = NSColor(c).usingColorSpace(.sRGB) ?? .white
@@ -134,7 +134,7 @@ struct Content: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Loftslampe").font(.headline)
+                Text("Ceiling lamp").font(.headline)
                 Spacer()
                 if lamp.busy { ProgressView().controlSize(.small) }
                 Toggle("", isOn: Binding(get: { lamp.state.on }, set: { _ in lamp.toggle() }))
@@ -169,7 +169,7 @@ struct Content: View {
 
             Divider()
 
-            Toggle("Start ved login", isOn: $launchAtLogin)
+            Toggle("Start at login", isOn: $launchAtLogin)
                 .toggleStyle(.checkbox).font(.callout)
                 .onChange(of: launchAtLogin) { _, on in
                     do { on ? try SMAppService.mainApp.register()
@@ -177,7 +177,7 @@ struct Content: View {
                     catch { launchAtLogin = (SMAppService.mainApp.status == .enabled) }
                 }
 
-            Button("Afslut") { NSApplication.shared.terminate(nil) }
+            Button("Quit") { NSApplication.shared.terminate(nil) }
                 .buttonStyle(.plain).font(.callout).foregroundStyle(.secondary)
         }
         .padding(14)

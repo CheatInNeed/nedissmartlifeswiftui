@@ -18,7 +18,7 @@ tuya-raw.json
 # macOS
 .DS_Store
 
-# Xcode (til Fase 3)
+# Xcode
 xcuserdata/
 *.xcuserstate
 DerivedData/

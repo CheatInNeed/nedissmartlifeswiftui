@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""CLI til at styre en Nedis SmartLife (Tuya) loftslampe lokalt via TinyTuya.
+"""CLI for controlling a Nedis SmartLife (Tuya) ceiling lamp locally via TinyTuya.
 
-Al output er JSON. Ved fejl skrives {"error": "..."} til stdout og exit-kode != 0.
+All output is JSON. On failure {"error": "..."} is printed to stdout and the exit code is non-zero.
 
-Kommandoer:
+Commands:
     lamp.py status                on/off, mode, brightness %, colourtemp %, rgb
     lamp.py on
     lamp.py off
     lamp.py brightness <0-100>
-    lamp.py temp <0-100>          0 = varm, 100 = kold
-    lamp.py color <hex>           fx #FF8800
+    lamp.py temp <0-100>          0 = warm, 100 = cold
+    lamp.py color <hex>           e.g. #FF8800
 
-Device-id, IP, local key og protokolversion læses fra en config-fil uden for
-repoet (default ~/.config/lamp/config.json, kan overstyres med $LAMP_CONFIG).
+Device ID, IP, local key and protocol version are read from a config file outside
+the repo (default ~/.config/lamp/config.json, override with $LAMP_CONFIG).
 """
 
 import colorsys
@@ -23,15 +23,15 @@ import sys
 try:
     import tinytuya
 except ImportError:
-    print(json.dumps({"error": "tinytuya er ikke installeret i det python-miljø, der kører lamp.py"}))
+    print(json.dumps({"error": "tinytuya is not installed in the Python environment running lamp.py"}))
     sys.exit(2)
 
 
-# DP-numre (Tuya v2-skema, bekræftet mod lampen)
+# Data point numbers (Tuya "v2" bulb schema, verified against the lamp)
 DP_SWITCH = "20"      # bool
 DP_MODE = "21"        # "white" | "colour" | "scene" | "music"
 DP_BRIGHT = "22"      # 10-1000
-DP_TEMP = "23"        # 0-1000 (0 = varm, 1000 = kold)
+DP_TEMP = "23"        # 0-1000 (0 = warm, 1000 = cold)
 DP_COLOUR = "24"      # HSV-hex: HHHH SSSS VVVV (H 0-360, S/V 0-1000)
 
 BRIGHT_MIN = 10
@@ -56,12 +56,12 @@ def load_config():
         with open(path) as f:
             cfg = json.load(f)
     except FileNotFoundError:
-        fail(f"config-fil ikke fundet: {path}")
+        fail(f"config file not found: {path}")
     except (OSError, ValueError) as e:
-        fail(f"kunne ikke læse config ({path}): {e}")
+        fail(f"could not read config ({path}): {e}")
     for key in ("device_id", "ip", "local_key", "version"):
         if not cfg.get(key):
-            fail(f"config mangler feltet '{key}' i {path}")
+            fail(f"config is missing the field '{key}' in {path}")
     return cfg
 
 
@@ -77,14 +77,14 @@ def connect(cfg):
 
 
 def read_dps(d):
-    """Hent status og returnér dps-dict, eller fejl pænt."""
+    """Fetch status and return the dps dict, or fail cleanly."""
     data = d.status()
     if not isinstance(data, dict) or "dps" not in data:
         err = data.get("Error") if isinstance(data, dict) else None
         if err:
-            fail(f"lampen svarede ikke korrekt: {err} "
-                 "(tjek IP, local key og at lampen er online)")
-        fail("lampen svarede ikke (timeout eller offline)")
+            fail(f"the lamp did not respond correctly: {err} "
+                 "(check IP, local key and that the lamp is online)")
+        fail("the lamp did not respond (timeout or offline)")
     return data["dps"]
 
 
@@ -96,7 +96,7 @@ def parse_percent(arg, name):
     try:
         pct = int(round(float(arg)))
     except (TypeError, ValueError):
-        fail(f"{name} skal være et tal mellem 0 og 100, fik {arg!r}")
+        fail(f"{name} must be a number between 0 and 100, got {arg!r}")
     return clamp(pct, 0, 100)
 
 
@@ -126,7 +126,7 @@ def temp_pct_to_raw(pct):
 
 
 def colour_hex_to_rgb(hexstr):
-    """Tuya v2 HSV-hex (12 tegn) -> [r, g, b] 0-255."""
+    """Tuya v2 HSV hex (12 chars) -> [r, g, b] 0-255."""
     if not hexstr or len(hexstr) < 12:
         return None
     try:
@@ -151,13 +151,13 @@ def rgb_to_colour_hex(r, g, b):
 def parse_hex_colour(arg):
     s = arg.lstrip("#").strip()
     if len(s) != 6:
-        fail(f"farve skal være en hex-værdi som #FF8800, fik {arg!r}")
+        fail(f"colour must be a hex value like #FF8800, got {arg!r}")
     try:
         r = int(s[0:2], 16)
         g = int(s[2:4], 16)
         b = int(s[4:6], 16)
     except ValueError:
-        fail(f"ugyldig hex-farve: {arg!r}")
+        fail(f"invalid hex colour: {arg!r}")
     return r, g, b
 
 
@@ -193,7 +193,7 @@ def cmd_off(d):
 def cmd_brightness(d, arg):
     pct = parse_percent(arg, "brightness")
     raw = bright_pct_to_raw(pct)
-    # Lysstyrke-DP'en gælder white-mode; skift til white så sliderens effekt ses.
+    # The brightness DP applies to white mode; switch to white so the change is visible.
     check_set(d.set_multiple_values({DP_MODE: "white", DP_BRIGHT: raw}))
     print(json.dumps({"brightness": pct}))
 
@@ -214,7 +214,7 @@ def cmd_color(d, arg):
 
 def main(argv):
     if not argv:
-        fail("mangler kommando (status|on|off|brightness|temp|color)", 2)
+        fail("missing command (status|on|off|brightness|temp|color)", 2)
     cmd = argv[0]
     cfg = load_config()
     d = connect(cfg)
@@ -227,22 +227,22 @@ def main(argv):
             cmd_off(d)
         elif cmd == "brightness":
             if len(argv) < 2:
-                fail("brightness kræver en værdi 0-100", 2)
+                fail("brightness needs a value 0-100", 2)
             cmd_brightness(d, argv[1])
         elif cmd == "temp":
             if len(argv) < 2:
-                fail("temp kræver en værdi 0-100", 2)
+                fail("temp needs a value 0-100", 2)
             cmd_temp(d, argv[1])
         elif cmd == "color":
             if len(argv) < 2:
-                fail("color kræver en hex-værdi, fx #FF8800", 2)
+                fail("color needs a hex value, e.g. #FF8800", 2)
             cmd_color(d, argv[1])
         else:
-            fail(f"ukendt kommando: {cmd}", 2)
+            fail(f"unknown command: {cmd}", 2)
     except SystemExit:
         raise
-    except Exception as e:  # netværksfejl o.l. -> pæn JSON
-        fail(f"uventet fejl mod lampen: {e}")
+    except Exception as e:  # network errors etc. -> clean JSON
+        fail(f"unexpected error talking to the lamp: {e}")
 
 
 if __name__ == "__main__":
