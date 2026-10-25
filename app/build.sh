@@ -1,26 +1,31 @@
 #!/bin/bash
-# Bygger LampBar.app med Command Line Tools-swiftc (virker på macOS 26, hvor Xcode 15.1 ikke kan).
-# Installerer også lamp.py + venv-sti, som appen kalder.
+# Builds build/LampBar.app and installs lamp.py + its Python venv under ~/.local/share/lamp.
+# Requires Xcode (its swiftc ships the SwiftUI macro plugin that Command Line Tools alone lack).
 set -euo pipefail
 
 cd "$(dirname "$0")"
 REPO="$(cd .. && pwd)"
-# Byg med Xcode-toolchainen mod macOS 14-SDK'et. Den færdige app kører på macOS 14+ (inkl. 26).
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-SDK="$(xcrun --sdk macosx --show-sdk-path)"
 APP="$REPO/build/LampBar.app"
 LAMPDIR="$HOME/.local/share/lamp"
+PYTHON="${PYTHON:-python3}"
 
-# 1) Installér lamp.py ved siden af venv'et (så appen slipper for den lange OneDrive-sti).
+# Prefer /Applications/Xcode.app; otherwise use whatever xcode-select points at.
+[ -d /Applications/Xcode.app ] && export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+xcrun --find swiftc >/dev/null 2>&1 || { echo "Xcode not found. Install it from the App Store." >&2; exit 1; }
+SDK="$(xcrun --sdk macosx --show-sdk-path)"
+
+# 1) Install lamp.py and a venv with tinytuya (the app calls them from this fixed path).
 mkdir -p "$LAMPDIR"
 cp "$REPO/lamp.py" "$LAMPDIR/lamp.py"
 if [ ! -x "$LAMPDIR/venv/bin/python3" ]; then
-  echo "ADVARSEL: venv mangler i $LAMPDIR/venv – kør: python3 -m venv $LAMPDIR/venv && $LAMPDIR/venv/bin/pip install tinytuya" >&2
+  "$PYTHON" -m venv "$LAMPDIR/venv"
+  "$LAMPDIR/venv/bin/pip" install --quiet -r "$REPO/requirements.txt"
 fi
+[ -f "$HOME/.config/lamp/config.json" ] || echo "Note: ~/.config/lamp/config.json is missing - see README step 3." >&2
 
-# 2) Byg app-bundlet.
+# 2) Build the app bundle.
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28,7 +33,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key><string>LampBar</string>
-  <key>CFBundleDisplayName</key><string>LampBar</string>
   <key>CFBundleIdentifier</key><string>dk.peterroland.lampbar</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
@@ -40,12 +44,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-xcrun swiftc -sdk "$SDK" -target arm64-apple-macosx14.0 -O -swift-version 5 -parse-as-library \
+xcrun swiftc -sdk "$SDK" -target "$(uname -m)-apple-macosx14.0" -O -swift-version 5 -parse-as-library \
   -framework SwiftUI -framework AppKit -framework ServiceManagement \
-  -o "$APP/Contents/MacOS/LampBar" \
-  LampBar.swift
+  -o "$APP/Contents/MacOS/LampBar" LampBar.swift
 
-# 3) Ad-hoc signering (nødvendigt for SMAppService/menu bar på Apple Silicon).
-codesign --force --deep -s - "$APP" >/dev/null 2>&1 || true
+# 3) Ad-hoc signature (required to run on Apple Silicon and to register as a login item).
+codesign --force --deep -s - "$APP" >/dev/null
 
-echo "Bygget: $APP"
+echo "Built: $APP"

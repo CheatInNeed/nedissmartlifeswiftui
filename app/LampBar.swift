@@ -42,12 +42,24 @@ final class Lamp: ObservableObject {
     @Published var error: String?
     @Published var busy = false
 
-    private var brightnessTask: Task<Void, Never>?
-    private var tempTask: Task<Void, Never>?
-    private var colorTask: Task<Void, Never>?
+    // Kommandoer køres én ad gangen. En ny kommando med samme nøgle erstatter en, der
+    // venter, så sliders giver live respons uden at stable kald op (kun nyeste værdi sendes).
+    private var queue: [(key: String, args: [String])] = []
+    private var draining = false
 
-    // Kør en kommando og opdatér state ud fra svaret (eller vis fejl).
-    private func send(_ args: [String], refresh: Bool = false) async {
+    private func enqueue(_ key: String, _ args: [String]) {
+        queue.removeAll { $0.key == key }
+        queue.append((key, args))
+        guard !draining else { return }
+        draining = true
+        Task {
+            while !queue.isEmpty { await send(queue.removeFirst().args) }
+            draining = false
+        }
+    }
+
+    // Kør en kommando og vis fejl, hvis lampen ikke svarer.
+    private func send(_ args: [String]) async {
         busy = true; defer { busy = false }
         do {
             let data = try await Task.detached { try runLamp(args) }.value
@@ -56,7 +68,6 @@ final class Lamp: ObservableObject {
                 error = msg; return
             }
             error = nil
-            if refresh { await refreshNow() }
         } catch {
             self.error = "Kunne ikke køre lamp.py: \(error.localizedDescription)"
         }
@@ -82,48 +93,23 @@ final class Lamp: ObservableObject {
 
     func toggle() {
         state.on.toggle()
-        let on = state.on
-        Task { await send([on ? "on" : "off"]) }
+        enqueue("power", [state.on ? "on" : "off"])
     }
 
-    // Debounce ~250 ms, så sliderne ikke sender en kommando pr. pixel.
     func setBrightness(_ pct: Int) {
         state.brightness = pct
-        brightnessTask?.cancel()
-        brightnessTask = Task {
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            if Task.isCancelled { return }
-            await send(["brightness", String(pct)])
-        }
+        enqueue("brightness", ["brightness", String(pct)])
     }
 
     func setTemp(_ pct: Int) {
         state.colourtemp = pct
-        tempTask?.cancel()
-        tempTask = Task {
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            if Task.isCancelled { return }
-            await send(["temp", String(pct)])
-        }
+        enqueue("temp", ["temp", String(pct)])
     }
 
     // Tilbage til hvid: `temp` skifter lampen til white-mode med den nuværende farvetemperatur.
-    func setWhite() {
-        tempTask?.cancel(); colorTask?.cancel()
-        let t = state.colourtemp ?? 50
-        colorTask = Task { await send(["temp", String(t)], refresh: true) }
-    }
+    func setWhite() { enqueue("temp", ["temp", String(state.colourtemp ?? 50)]) }
 
-    func setColor(_ hex: String, debounce: Bool) {
-        colorTask?.cancel()
-        colorTask = Task {
-            if debounce {
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                if Task.isCancelled { return }
-            }
-            await send(["color", hex], refresh: true)
-        }
-    }
+    func setColor(_ hex: String) { enqueue("color", ["color", hex]) }
 }
 
 // MARK: - Farvehjælpere
@@ -170,14 +156,14 @@ struct Content: View {
             HStack(spacing: 8) {
                 ColorPicker("", selection: $color, supportsOpacity: false)
                     .labelsHidden()
-                    .onChange(of: color) { _, c in lamp.setColor(hex(c), debounce: true) }
+                    .onChange(of: color) { _, c in lamp.setColor(hex(c)) }
                 Circle().fill(.white).frame(width: 22, height: 22)
                     .overlay(Circle().strokeBorder(.gray.opacity(0.5)))
                     .onTapGesture { lamp.setWhite() }
                 ForEach(presets, id: \.self) { p in
                     Circle().fill(Color(hex: p)).frame(width: 22, height: 22)
                         .overlay(Circle().strokeBorder(.white.opacity(0.25)))
-                        .onTapGesture { lamp.setColor(p, debounce: false) }
+                        .onTapGesture { lamp.setColor(p) }
                 }
             }
 

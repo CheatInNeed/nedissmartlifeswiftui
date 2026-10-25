@@ -13,9 +13,9 @@ __pycache__/
 devices.json
 tinytuya.json
 snapshot.json
+tuya-raw.json
 
 # macOS
-.DSStore
 .DS_Store
 
 # Xcode (til Fase 3)
